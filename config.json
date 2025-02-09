@@ -1,0 +1,25 @@
+{
+  "mqtt": {
+    "username": "username",
+    "password": "password",
+    "server": "192.168.178.2",
+    "port": 1883
+  },
+  "eta": {
+    "interval": 30,
+	"location": "0x08",
+    "monitors": {
+      "Kessel": "0x08",
+      "Abgas": "0x0F",
+      "Boiler": "0x0D",
+      "Pufferladezustand": "0x4B",
+      "Puffer oben": "0x0C",
+      "Puffer mitte": "0x0B",
+      "Puffer unten": "0x0A",
+      "Kesselrücklauf": "0x09",
+      "Brenner": "0x75",
+      "Außentemperatur": "0x46",
+      "Vorlauf MK 1": "0x44"
+    }
+  }
+}
