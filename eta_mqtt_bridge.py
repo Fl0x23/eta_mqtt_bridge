@@ -113,45 +113,44 @@ def parse_message(message):
         print(error_message)
         return None
 
-def send_control_message(ser):
-
-	# Nachricht zur Übermittlung der Monitor-Daten
-	# Struktur:
-	# {MC\xLänge\xPrüfziffer\xIntervall\Datenfelder}
-	# 
-	# Beschreibung:
-	# 1. Start- und Endzeichen:
-	#    - `{` und `}`: Umrahmen die Nachricht.
-	# 2. Steuerzeichen:
-	#    - `M` und `C`: Kennzeichnen den Nachrichtentyp.
-	# 3. Länge:
-	#    - `\x22`: Anzahl der Datenbytes (inklusive Intervall und Datenfelder, exklusive Prüfziffer und Steuerzeichen).
-	# 4. Prüfziffer:
-	#    - `\x2c`: Prüfsumme der Datenbytes modulo 256.
-	# 5. Intervall:
-	#    - `\x3c`: Zeitlicher Intervall (z. B. 60 Sekunden).
-	# 6. Datenfelder:
-	#    - Jedes Datenfeld hat die Form: `\x08\x00\Monitor`, wobei:
-	#      - `\x08`: Bestellort (immer Kessel in diesem Fall).
-	#      - `\x00`: Zusatzfeld (keine spezifische Verwendung hier).
-	#      - `\Monitor`: Hexadezimaler Wert des Monitors.
-	#    - Monitore:
-	#      - `\x08\x00\x08`: Kessel.
-	#      - `\x08\x00\x0f`: Abgas.
-	#      - `\x08\x00\x0d`: Boiler.
-	#      - `\x08\x00\x4b`: Pufferladezustand.
-	#      - `\x08\x00\x0c`: Puffer oben.
-	#      - `\x08\x00\x0b`: Puffer mitte.
-	#      - `\x08\x00\x0a`: Puffer unten.
-	#      - `\x08\x00\x09`: Kesselrücklauf.
-	#      - `\x08\x00\x75`: Brenner.
-	#      - `\x08\x00\x46`: Außentemperatur.
-	#      - `\x08\x00\x44`: Vorlauf MK 1.
-
-    control_message = b'{MC\x22\x2c\x3c\x08\x00\x08\x08\x00\x0f\x08\x00\x0d\x08\x00\x4b\x08\x00\x0c\x08\x00\x0b\x08\x00\x0a\x08\x00\x09\x08\x00\x75\x08\x00\x46\x08\x00\x44}'
+def send_control_message(ser, eta_config: dict):
+    """
+    Sendet eine Steuerungsnachricht mit den Daten aus der eta-Konfiguration.
+    
+    :param ser: Serielles Objekt zur Kommunikation.
+    :param eta_config: Dictionary mit den Konfigurationsdaten von eta.
+    """
+    interval = eta_config.get("interval", 60)
+    order_location = int(eta_config.get("location", "0x08"), 16)
+    monitors = [int(value, 16) for value in eta_config.get("monitors", {}).values()]
+    
+    if len(monitors) == 0:
+        print("[ERROR] Die Monitor-Liste darf nicht leer sein.")
+        return
+    
+    # Intervall als einzelnes Byte kodieren
+    interval_byte = interval.to_bytes(1, 'big')
+    
+    # Datenfelder zusammenbauen
+    data_fields = b''
+    for monitor in monitors:
+        data_fields += order_location.to_bytes(1, 'big') + b'\x00' + monitor.to_bytes(1, 'big')
+    
+    # Länge der Nachricht bestimmen (Intervall + Datenfelder)
+    length_byte = (len(interval_byte) + len(data_fields)).to_bytes(1, 'big')
+    
+    # Prüfziffer berechnen
+    checksum_byte = calculate_checksum(interval_byte + data_fields).to_bytes(1, 'big')
+    
+    # Gesamtnachricht zusammenstellen
+    control_message = b'{' + b'MC' + length_byte + checksum_byte + interval_byte + data_fields + b'}'
+    
+    # Nachricht senden
     ser.write(control_message)
-    message = f"\n[INFO] Steuerungsnachricht gesendet: {format_control_message(control_message)}"
-    print(message)
+    
+    # Lesbare Nachricht ausgeben
+    readable_message = format_control_message(control_message)
+    print(f"\n[INFO] Steuerungsnachricht gesendet: {readable_message}")
 
 def send_stop_message(ser):
     stop_message = b'{ME\x00\x00}'
@@ -170,22 +169,24 @@ def send_to_mqtt(results, mqtt_client):
             print(message)
         mqtt_client.loop(2)  # Sicherstellen, dass alle Nachrichten gesendet wurden
 
-def load_mqtt_credentials(file_path):
+def load_mqtt_credentials(mqtt_config):
     """
     Lädt MQTT-Login-Daten aus einer Datei basierend auf der neuen Konfiguration.
     """
+    return (
+        mqtt_config.get("username"), 
+        mqtt_config.get("password"), 
+        mqtt_config.get("server"), 
+        mqtt_config.get("port")
+    )
+        
+def load_config(file_path: str) -> dict:
+    """Lädt die Konfigurationsdaten aus einer JSON-Datei."""
     try:
-        with open(file_path, 'r') as file:
-            config = json.load(file)
-            mqtt_config = config.get("mqtt", {})
-            return (
-                mqtt_config.get("username"), 
-                mqtt_config.get("password"), 
-                mqtt_config.get("server"), 
-                mqtt_config.get("port")
-            )
+        with open(file_path, 'r', encoding='utf-8') as file:
+            return json.load(file)
     except Exception as e:
-        error_message = f"[FEHLER] Fehler beim Laden der MQTT-Login-Daten: {e}"
+        error_message = f"[FEHLER] Fehler beim Laden der Config-Daten: {e}"
         print(error_message)
         raise
 
@@ -198,8 +199,13 @@ def main():
     message = f"[INFO] Serielle Verbindung hergestellt: {ser.port}"
     print(message)
 
+    print("\n[INFO] config.json laden...")
+    config = load_config("config.json")
+    mqtt_config = config.get("mqtt", {})
+    eta_config = config.get("eta", {})
+    
     print("\n[INFO] MQTT-Login-Daten laden...")
-    username, password, server, port = load_mqtt_credentials('/home/fl0x23/eta/mqtt_credentials.json')
+    username, password, server, port = load_mqtt_credentials(mqtt_config)
 
     print("\n[INFO] Verbindung zum MQTT-Server herstellen...")
     mqtt_client = mqtt.Client()
@@ -209,7 +215,7 @@ def main():
     print(message)
 
     try:
-        send_control_message(ser)
+        send_control_message(ser, eta_config)
 
         while True:
             print("\n[INFO] Warten auf Daten...")
@@ -218,8 +224,9 @@ def main():
                 warning_message = "[WARNUNG] Keine Daten empfangen."
                 print(warning_message)
                 continue
-
-            message = f"\n[INFO] Daten empfangen: {rohdaten}"
+            
+            readable_rohdata = format_control_message(rohdaten)
+            message = f"\n[INFO] Daten empfangen: {readable_rohdata}"
             print(message)
             results = parse_message(rohdaten)
             if results:
