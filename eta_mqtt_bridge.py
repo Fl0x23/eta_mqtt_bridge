@@ -8,6 +8,13 @@ def calculate_checksum(data):
     Berechnet die Prüfziffer durch Addition aller Bytes der Nutzdaten modulo 256.
     """
     return sum(data) % 256
+    
+def format_control_message(control_message: bytes) -> str:
+    """Formatiert die Steuerungsnachricht für eine leserliche Ausgabe."""
+    readable_message = "{MC "
+    readable_message += " ".join(f"0x{byte:02X}" for byte in control_message[3:-1])
+    readable_message += "}"
+    return readable_message
 
 def parse_message(message):
     """
@@ -143,7 +150,7 @@ def send_control_message(ser):
 
     control_message = b'{MC\x22\x2c\x3c\x08\x00\x08\x08\x00\x0f\x08\x00\x0d\x08\x00\x4b\x08\x00\x0c\x08\x00\x0b\x08\x00\x0a\x08\x00\x09\x08\x00\x75\x08\x00\x46\x08\x00\x44}'
     ser.write(control_message)
-    message = f"\n[INFO] Steuerungsnachricht gesendet: {control_message}"
+    message = f"\n[INFO] Steuerungsnachricht gesendet: {format_control_message(control_message)}"
     print(message)
 
 def send_stop_message(ser):
