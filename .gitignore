@@ -1,0 +1,8 @@
+# Ignoriere alle .log-Dateien
+*.log
+
+# Ignoriere alle .json-Dateien
+*.json
+
+# Ignoriere alle .txt-Dateien
+*.txt
