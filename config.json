@@ -7,7 +7,7 @@
   },
   "eta": {
     "interval": 30,
-	"location": "0x08",
+    "location": "0x08",
     "monitors": {
       "Kessel": "0x08",
       "Abgas": "0x0F",
