@@ -1,7 +1,5 @@
 {
   "mqtt": {
-    "username": "username",
-    "password": "password",
     "server": "192.168.178.2",
     "port": 1883
   },

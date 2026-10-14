@@ -10,11 +10,28 @@ Dieses Repository enthält ein Python-Skript, das sich mit einem ETA SH30 Scheit
 
 ## Konfiguration
 
-Die Konfiguration erfolgt über eine `config.json`-Datei, die die folgenden Informationen enthält:
+Die Konfiguration ist auf zwei Dateien im Ordner des Skripts aufgeteilt:
+
+| Datei          | Inhalt                                    | Im Repository |
+|----------------|-------------------------------------------|---------------|
+| `config.json`  | MQTT-Server, ETA-Einstellungen, Monitore  | ja            |
+| `secrets.json` | MQTT-Login-Daten                          | nein          |
+
+### secrets.json
+
+Vorlage kopieren und die eigenen Login-Daten eintragen:
+
+```bash
+cp secrets.example.json secrets.json
+```
 
 - **MQTT**:
   - `username`: Benutzername MQTT-Authentifizierung.
   - `password`: Passwort MQTT-Authentifizierung.
+
+### config.json
+
+- **MQTT**:
   - `server`: Die Adresse des MQTT-Servers.
   - `port`: Der Port des MQTT-Servers.
 - **ETA**:
@@ -22,7 +39,7 @@ Die Konfiguration erfolgt über eine `config.json`-Datei, die die folgenden Info
   - `location`: Die Abruflocation.
   - `monitors`: Die Werte, die abgefragt und an MQTT gesendet werden sollen (siehe unten).
 
-### Monitore
+#### Monitore
 
 Alle abzufragenden Werte werden in der `config.json` festgelegt.
 Der Schlüssel ist ein frei wählbarer Name, der Wert ein Objekt mit diesen Feldern:
@@ -47,7 +64,7 @@ Beispiele:
 
 Für eine Temperatur reicht also `{ "id": "0x..." }`, alles andere hat passende Standardwerte.
 
-### Monitor-IDs
+#### Monitor-IDs
 
 - `scale`: Teiler für den Rohwert (z. B. `10` → 452 wird 45,2).
 - `signed`: Wert kann negativ sein (z. B. Außentemperatur).

@@ -1,8 +1,8 @@
 # Ignoriere alle .log-Dateien
 *.log
 
-# Ignoriere alle .json-Dateien
-*.json
+# Ignoriere die Datei mit den MQTT-Login-Daten
+secrets.json
 
 # Ignoriere alle .txt-Dateien
 *.txt
