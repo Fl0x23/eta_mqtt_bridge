@@ -1,6 +1,7 @@
 import serial
 import paho.mqtt.client as mqtt
 import json
+import re
 from datetime import datetime
 
 def calculate_checksum(data):
@@ -16,9 +17,57 @@ def format_control_message(control_message: bytes) -> str:
     readable_message += "}"
     return readable_message
 
-def parse_message(message):
+def make_topic(name: str) -> str:
+    """Leitet aus dem Monitor-Namen ein MQTT-Topic ab, z. B. "Puffer oben" -> "puffer_oben"."""
+    topic = name.lower()
+    for umlaut, replacement in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
+        topic = topic.replace(umlaut, replacement)
+    return re.sub(r"[^a-z0-9]+", "_", topic).strip("_")
+
+def load_monitors(eta_config: dict) -> list:
+    """
+    Liest die Monitore aus der eta-Konfiguration und ergänzt Standardwerte.
+
+    Jeder Monitor ist ein Objekt mit:
+      id      (Pflicht)  Monitor-ID als Hex-String, z. B. "0x08"
+      topic   (optional) MQTT-Topic, Standard: aus dem Namen abgeleitet
+      scale   (optional) Teiler für den Rohwert, Standard: 10 (Temperaturen)
+      signed  (optional) Rohwert mit Vorzeichen, Standard: true
+      invalid (optional) Rohwert, der "kein gültiger Wert" bedeutet, z. B. "0x8000"
+    """
+    monitors = []
+    for name, settings in eta_config.get("monitors", {}).items():
+        if not isinstance(settings, dict) or "id" not in settings:
+            raise ValueError(
+                f'Monitor "{name}": erwartet wird ein Objekt mit "id", '
+                f'z. B. {{"id": "0x08", "topic": "kessel"}}, erhalten: {settings!r}'
+            )
+        invalid = settings.get("invalid")
+        monitors.append({
+            "name": name,
+            "id": int(settings["id"], 16),
+            "topic": settings.get("topic") or make_topic(name),
+            "scale": settings.get("scale", 10),
+            "signed": settings.get("signed", True),
+            "invalid": int(invalid, 16) if invalid is not None else None,
+        })
+
+    seen = {}
+    for monitor in monitors:
+        if monitor["id"] in seen:
+            raise ValueError(
+                f'Monitor-ID 0x{monitor["id"]:02X} ist doppelt vergeben: '
+                f'"{seen[monitor["id"]]}" und "{monitor["name"]}"'
+            )
+        seen[monitor["id"]] = monitor["name"]
+
+    return monitors
+
+def parse_message(message, monitors_by_id: dict):
     """
     Zerlegt eine Nachricht in ihre Bestandteile basierend auf dem Protokoll und verarbeitet mehrere Datenpaare.
+
+    :param monitors_by_id: Monitore aus der Konfiguration, nach Monitor-ID.
     """
     if not message.startswith(b'{') or not message.endswith(b'}'):
         error_message = "[FEHLER] Ungültige Nachricht: Kein gültiger Start oder Endmarker gefunden."
@@ -59,68 +108,30 @@ def parse_message(message):
                 byte5 = data[i + 4]
 
                 # Zuordnung anhand von Byte3
-                assignments = {
-                    0x08: "kessel",
-                    0x0F: "abgas",
-                    0x0D: "boiler",
-                    0xA4: "brauchwasser",
-                    0x6A: "bwt_rucklauf",
-                    0x6B: "bwt_mitte",
-                    0x4B: "pufferladezustand",
-                    0x0C: "puffer_oben",
-                    0x0B: "puffer_mitte",
-                    0x0A: "puffer_unten",
-                    0x09: "kesselrucklauf",
-                    0x75: "brenner",
-                    0x3E: "kollektor",
-                    0xA1: "boiler_oben_sol",
-                    0x3F: "boiler_unten_sol",
-                    0x46: "aussentemperatur",
-                    0x44: "vorlauf_mk1",
-                    0x42: "raum_mk1",
-                    0x45: "vorlauf_mk2",
-                    0x43: "raum_mk2",
-                    0x52: "vorlauf_mk3",
-                    0x51: "raum_mk3",
-                    0x5E: "vorlauf_mk4",
-                    0x5D: "raum_mk4",
-                    0x07: "abgasgeblaese",
-                    0x2B: "heizkreispumpe_mk1",
-                    0x2C: "heizkreispumpe_mk2",
-                    0x2D: "boilerladepumpe",
-                    0x2E: "pufferladepumpe",
-                    0x21: "betriebsstunden_abgasgeblaese",
-                    0x37: "wartung_stunden",
-                    0x03: "kesseltuer",
-                    0x28: "restsauerstoff",
-                }
+                monitor = monitors_by_id.get(byte3)
+                if monitor is None:
+                    print(f"  [WARNUNG] Unbekannte Monitor-ID 0x{byte3:02X}, Wert wird ignoriert.")
+                    continue
 
-                topic = assignments.get(byte3)
-                # Lambdasonde noch nicht bereit (0x8000) -> nicht senden
-                if topic == "restsauerstoff" and byte4 == 0x80 and byte5 == 0x00:
-                    topic = None
-                    
-                # Temperatur berechnen, falls nicht Pufferladezustand
-                if topic in ("pufferladezustand", "abgasgeblaese", "heizkreispumpe_mk1",
-                             "heizkreispumpe_mk2", "boilerladepumpe", "pufferladepumpe",
-                             "betriebsstunden_abgasgeblaese", "wartung_stunden", "kesseltuer"):
-                    value = byte4 * 256 + byte5
-                elif topic == "restsauerstoff":
-                    value = (byte4 * 256 + byte5) / 100
-                else:
-                    # 16-Bit-Wert aus zwei Bytes zusammensetzen
-                    value = (byte4 << 8) | byte5  # Bitweise Verschiebung für Klarheit
-    
-                    # Überprüfen, ob das Ergebnis negativ ist (Two’s Complement)
-                    if value >= 32768:  # 0x8000 = 32768 (negative Werte)
-                        value -= 65536  # Korrektur für negative Zahlen
+                topic = monitor["topic"]
 
-                    value = value / 10  # Division durch 10 für Temperaturwerte
-                    
-                if topic:
-                    data_message = f"  [DATEN] Typ: {topic}, Wert: {value}"
-                    print(data_message)
-                    results.append({"topic": topic, "value": value})
+                # 16-Bit-Rohwert aus zwei Bytes zusammensetzen
+                raw = (byte4 << 8) | byte5
+
+                # Sensor meldet "kein gültiger Wert" (z. B. Lambdasonde nicht bereit) -> nicht senden
+                if raw == monitor["invalid"]:
+                    print(f"  [DATEN] Typ: {topic}, kein gültiger Wert (0x{raw:04X}), wird nicht gesendet.")
+                    continue
+
+                # Negative Werte (Two’s Complement)
+                if monitor["signed"] and raw >= 0x8000:
+                    raw -= 0x10000
+
+                value = raw / monitor["scale"] if monitor["scale"] != 1 else raw
+
+                data_message = f"  [DATEN] Typ: {topic}, Wert: {value}"
+                print(data_message)
+                results.append({"topic": topic, "value": value})
 
         return results
 
@@ -129,16 +140,17 @@ def parse_message(message):
         print(error_message)
         return None
 
-def send_control_message(ser, eta_config: dict):
+def send_control_message(ser, eta_config: dict, monitor_list: list):
     """
     Sendet eine Steuerungsnachricht mit den Daten aus der eta-Konfiguration.
-    
+
     :param ser: Serielles Objekt zur Kommunikation.
     :param eta_config: Dictionary mit den Konfigurationsdaten von eta.
+    :param monitor_list: Monitore aus load_monitors().
     """
     interval = eta_config.get("interval", 60)
     order_location = int(eta_config.get("location", "0x08"), 16)
-    monitors = [int(value, 16) for value in eta_config.get("monitors", {}).values()]
+    monitors = [monitor["id"] for monitor in monitor_list]
     
     if len(monitors) == 0:
         print("[ERROR] Die Monitor-Liste darf nicht leer sein.")
@@ -210,16 +222,18 @@ def main():
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n[START] Script gestartet um: {timestamp}")
 
+    print("\n[INFO] config.json laden...")
+    config = load_config("/home/fl0x23/eta/config.json")
+    mqtt_config = config.get("mqtt", {})
+    eta_config = config.get("eta", {})
+    monitor_list = load_monitors(eta_config)
+    monitors_by_id = {monitor["id"]: monitor for monitor in monitor_list}
+
     print("\n[INFO] Verbindung zur seriellen Schnittstelle herstellen...")
     ser = serial.Serial('/dev/ttyUSB0', 19200, timeout=10)
     message = f"[INFO] Serielle Verbindung hergestellt: {ser.port}"
     print(message)
 
-    print("\n[INFO] config.json laden...")
-    config = load_config("/home/fl0x23/eta/config.json")
-    mqtt_config = config.get("mqtt", {})
-    eta_config = config.get("eta", {})
-    
     print("\n[INFO] MQTT-Login-Daten laden...")
     username, password, server, port = load_mqtt_credentials(mqtt_config)
 
@@ -231,7 +245,7 @@ def main():
     print(message)
 
     try:
-        send_control_message(ser, eta_config)
+        send_control_message(ser, eta_config, monitor_list)
 
         while True:
             print("\n[INFO] Warten auf Daten...")
@@ -244,7 +258,7 @@ def main():
             readable_rohdata = format_control_message(rohdaten)
             message = f"\n[INFO] Daten empfangen: {readable_rohdata}"
             print(message)
-            results = parse_message(rohdaten)
+            results = parse_message(rohdaten, monitors_by_id)
             if results:
                 send_stop_message(ser)
                 send_to_mqtt(results, mqtt_client)
