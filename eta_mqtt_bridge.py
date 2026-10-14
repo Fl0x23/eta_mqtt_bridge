@@ -84,13 +84,29 @@ def parse_message(message):
                     0x51: "raum_mk3",
                     0x5E: "vorlauf_mk4",
                     0x5D: "raum_mk4",
+                    0x07: "abgasgeblaese",
+                    0x2B: "heizkreispumpe_mk1",
+                    0x2C: "heizkreispumpe_mk2",
+                    0x2D: "boilerladepumpe",
+                    0x2E: "pufferladepumpe",
+                    0x21: "betriebsstunden_abgasgeblaese",
+                    0x37: "wartung_stunden",
+                    0x03: "kesseltuer",
+                    0x28: "restsauerstoff",
                 }
 
                 topic = assignments.get(byte3)
+                # Lambdasonde noch nicht bereit (0x8000) -> nicht senden
+                if topic == "restsauerstoff" and byte4 == 0x80 and byte5 == 0x00:
+                    topic = None
                     
                 # Temperatur berechnen, falls nicht Pufferladezustand
-                if topic == "pufferladezustand":
+                if topic in ("pufferladezustand", "abgasgeblaese", "heizkreispumpe_mk1",
+                             "heizkreispumpe_mk2", "boilerladepumpe", "pufferladepumpe",
+                             "betriebsstunden_abgasgeblaese", "wartung_stunden", "kesseltuer"):
                     value = byte4 * 256 + byte5
+                elif topic == "restsauerstoff":
+                    value = (byte4 * 256 + byte5) / 100
                 else:
                     # 16-Bit-Wert aus zwei Bytes zusammensetzen
                     value = (byte4 << 8) | byte5  # Bitweise Verschiebung für Klarheit
@@ -200,7 +216,7 @@ def main():
     print(message)
 
     print("\n[INFO] config.json laden...")
-    config = load_config("config.json")
+    config = load_config("/home/fl0x23/eta/config.json")
     mqtt_config = config.get("mqtt", {})
     eta_config = config.get("eta", {})
     

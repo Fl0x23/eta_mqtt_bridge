@@ -19,7 +19,16 @@
       "Kesselrücklauf": "0x09",
       "Brenner": "0x75",
       "Außentemperatur": "0x46",
-      "Vorlauf MK 1": "0x44"
+      "Vorlauf MK 1": "0x44",
+	    "Abgasgebläse": "0x07",
+      "Heizkreispumpe MK1": "0x2B",
+      "Heizkreispumpe MK2": "0x2C",
+      "Boilerladepumpe": "0x2D",
+      "Pufferladepumpe": "0x2E",
+      "Betriebsstunden Abgasgebläse": "0x21",
+	    "Wartung": "0x37",
+      "Kesseltür": "0x03",
+      "Restsauerstoff": "0x28"
     }
   }
 }
