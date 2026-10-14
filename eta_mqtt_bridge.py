@@ -192,6 +192,49 @@ def send_stop_message(ser):
     message = f"\n[INFO] Stoppnachricht gesendet: {stop_message}"
     print(message)
 
+def query_batch(ser, eta_config: dict, batch: list, monitors_by_id: dict):
+    """
+    Fragt ein Paket von Monitoren ab: Steuerungsnachricht senden, auf eine gültige
+    Antwort warten, Stoppnachricht senden und nachlaufende Daten verwerfen.
+
+    :return: Liste der Werte, oder None, wenn nach max_attempts Leseversuchen
+             keine gültige Antwort kam.
+    """
+    max_attempts = eta_config.get("max_attempts", 5)
+    send_control_message(ser, eta_config, batch)
+
+    results = None
+    for attempt in range(1, max_attempts + 1):
+        print(f"\n[INFO] Warten auf Daten (Versuch {attempt}/{max_attempts})...")
+        rohdaten = ser.read(1024)
+        if not rohdaten:
+            warning_message = "[WARNUNG] Keine Daten empfangen."
+            print(warning_message)
+            continue
+
+        readable_rohdata = format_control_message(rohdaten)
+        message = f"\n[INFO] Daten empfangen: {readable_rohdata}"
+        print(message)
+        results = parse_message(rohdaten, monitors_by_id)
+        # Leere Liste ist eine gültige Antwort (z. B. nur ungültige Werte), None ein Fehler
+        if results is not None:
+            break
+
+    # Auch ohne gültige Antwort stoppen, damit die ETA nicht weiter sendet
+    send_stop_message(ser)
+
+    # Überprüfen, ob weitere Daten nach der Stoppnachricht kommen
+    print("\n[INFO] Überprüfen auf zusätzliche Daten nach der Stoppnachricht...")
+    additional_data = ser.read(1024)
+    if additional_data:
+        warning_message = f"[WARNUNG] Zusätzliche Daten empfangen: {additional_data}"
+        print(warning_message)
+    else:
+        message = "[INFO] Keine zusätzlichen Daten empfangen."
+        print(message)
+
+    return results
+
 def send_to_mqtt(results, mqtt_client):
     if results:
         print("\n[INFO] Sende Daten an MQTT:")
@@ -245,46 +288,21 @@ def main():
     message = f"[INFO] Serielle Verbindung hergestellt: {ser.port}"
     print(message)
 
-    print("\n[INFO] MQTT-Login-Daten laden...")
-    username, password, server, port = load_mqtt_credentials(mqtt_config, mqtt_secrets)
-
-    print("\n[INFO] Verbindung zum MQTT-Server herstellen...")
-    mqtt_client = mqtt.Client()
-    mqtt_client.username_pw_set(username, password)
-    mqtt_client.connect(server, port, 60)
-    message = "[INFO] MQTT-Verbindung hergestellt."
-    print(message)
-
+    # Erst alle Werte von der ETA lesen, danach gebündelt an MQTT senden
+    all_results = []
     try:
-        send_control_message(ser, eta_config, monitor_list)
+        # Die ETA liefert nur eine begrenzte Anzahl Werte pro Anfrage -> in Paketen abfragen
+        max_monitors = eta_config.get("max_monitors", 20)
+        batches = [monitor_list[i:i + max_monitors] for i in range(0, len(monitor_list), max_monitors)]
 
-        while True:
-            print("\n[INFO] Warten auf Daten...")
-            rohdaten = ser.read(1024)
-            if not rohdaten:
-                warning_message = "[WARNUNG] Keine Daten empfangen."
-                print(warning_message)
+        for number, batch in enumerate(batches, start=1):
+            print(f"\n[INFO] Paket {number}/{len(batches)}: {len(batch)} Werte abfragen...")
+            results = query_batch(ser, eta_config, batch, monitors_by_id)
+            if results is None:
+                names = ", ".join(monitor["name"] for monitor in batch)
+                print(f"[WARNUNG] Paket {number}/{len(batches)}: keine gültige Antwort, wird übersprungen ({names}).")
                 continue
-            
-            readable_rohdata = format_control_message(rohdaten)
-            message = f"\n[INFO] Daten empfangen: {readable_rohdata}"
-            print(message)
-            results = parse_message(rohdaten, monitors_by_id)
-            if results:
-                send_stop_message(ser)
-                send_to_mqtt(results, mqtt_client)
-                print("\n[INFO] Verarbeitung abgeschlossen.")
-                break
-
-        # Überprüfen, ob weitere Daten nach der Stoppnachricht kommen
-        print("\n[INFO] Überprüfen auf zusätzliche Daten nach der Stoppnachricht...")
-        additional_data = ser.read(1024)
-        if additional_data:
-            warning_message = f"[WARNUNG] Zusätzliche Daten empfangen: {additional_data}"
-            print(warning_message)
-        else:
-            message = "[INFO] Keine zusätzlichen Daten empfangen."
-            print(message)
+            all_results.extend(results)
 
     except Exception as e:
         error_message = f"[FEHLER] {e}"
@@ -297,6 +315,29 @@ def main():
         message = "[INFO] Verbindung zur seriellen Schnittstelle geschlossen."
         print(message)
 
+    if not all_results:
+        print("\n[WARNUNG] Keine Werte empfangen, nichts an MQTT zu senden.")
+        return
+
+    print("\n[INFO] MQTT-Login-Daten laden...")
+    username, password, server, port = load_mqtt_credentials(mqtt_config, mqtt_secrets)
+
+    print("\n[INFO] Verbindung zum MQTT-Server herstellen...")
+    mqtt_client = mqtt.Client()
+    mqtt_client.username_pw_set(username, password)
+    try:
+        mqtt_client.connect(server, port, 60)
+        message = "[INFO] MQTT-Verbindung hergestellt."
+        print(message)
+
+        send_to_mqtt(all_results, mqtt_client)
+        print("\n[INFO] Verarbeitung abgeschlossen.")
+
+    except Exception as e:
+        error_message = f"[FEHLER] {e}"
+        print(error_message)
+
+    finally:
         message = "[INFO] Verbindung zum MQTT-Server schließen..."
         print(message)
         mqtt_client.disconnect()

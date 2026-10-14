@@ -37,6 +37,10 @@ cp secrets.example.json secrets.json
 - **ETA**:
   - `interval`: Sendeintervall der ETA in Sekunden (max. 255).
   - `location`: Die Abruflocation.
+  - `max_monitors`: Maximale Anzahl Werte pro Anfrage an die ETA (Standard: 20). Sind mehr Monitore eingetragen, fragt das Skript sie nacheinander in Paketen dieser Größe ab.
+  - `max_attempts`: Leseversuche pro Paket à 10 Sekunden (Standard: 5). Kommt bis dahin keine gültige Antwort, wird das Paket übersprungen.
+
+Alle Werte werden zuerst von der ETA gelesen und danach gebündelt an MQTT gesendet.
   - `monitors`: Die Werte, die abgefragt und an MQTT gesendet werden sollen (siehe unten).
 
 #### Monitore
