@@ -1,8 +1,4 @@
 {
-  "mqtt": {
-    "server": "192.168.178.2",
-    "port": 1883
-  },
   "eta": {
     "interval": 30,
     "location": "0x08",

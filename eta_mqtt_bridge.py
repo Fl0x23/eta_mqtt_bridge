@@ -246,22 +246,22 @@ def send_to_mqtt(results, mqtt_client):
             print(message)
         mqtt_client.loop(2)  # Sicherstellen, dass alle Nachrichten gesendet wurden
 
-def load_mqtt_credentials(mqtt_config, mqtt_secrets):
+def load_mqtt_credentials(mqtt_config):
     """
-    Liefert Login-Daten (aus secrets.json) und Server-Adresse (aus config.json) für MQTT.
+    Liefert Login-Daten und Server-Adresse für MQTT aus der secrets.json.
     """
     return (
-        mqtt_secrets.get("username"),
-        mqtt_secrets.get("password"),
+        mqtt_config.get("username"),
+        mqtt_config.get("password"),
         mqtt_config.get("server"),
-        mqtt_config.get("port")
+        mqtt_config.get("port", 1883)
     )
 
 def load_config(file_path: str) -> dict:
     """Lädt die Konfigurationsdaten aus einer JSON-Datei."""
     if file_path == SECRETS_PATH and not os.path.exists(file_path):
         print(f"[FEHLER] {file_path} nicht gefunden. "
-              "Bitte secrets.example.json nach secrets.json kopieren und die MQTT-Login-Daten eintragen.")
+              "Bitte secrets.example.json nach secrets.json kopieren und die MQTT-Zugangsdaten eintragen.")
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             return json.load(file)
@@ -277,8 +277,9 @@ def main():
     print("\n[INFO] config.json und secrets.json laden...")
     config = load_config(CONFIG_PATH)
     secrets = load_config(SECRETS_PATH)
-    mqtt_config = config.get("mqtt", {})
-    mqtt_secrets = secrets.get("mqtt", {})
+    mqtt_config = secrets.get("mqtt", {})
+    if not mqtt_config.get("server"):
+        raise ValueError(f'In {SECRETS_PATH} fehlt "server" unter "mqtt" (Adresse des MQTT-Servers).')
     eta_config = config.get("eta", {})
     monitor_list = load_monitors(eta_config)
     monitors_by_id = {monitor["id"]: monitor for monitor in monitor_list}
@@ -320,7 +321,7 @@ def main():
         return
 
     print("\n[INFO] MQTT-Login-Daten laden...")
-    username, password, server, port = load_mqtt_credentials(mqtt_config, mqtt_secrets)
+    username, password, server, port = load_mqtt_credentials(mqtt_config)
 
     print("\n[INFO] Verbindung zum MQTT-Server herstellen...")
     mqtt_client = mqtt.Client()

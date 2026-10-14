@@ -14,34 +14,33 @@ Die Konfiguration ist auf zwei Dateien im Ordner des Skripts aufgeteilt:
 
 | Datei          | Inhalt                                    | Im Repository |
 |----------------|-------------------------------------------|---------------|
-| `config.json`  | MQTT-Server, ETA-Einstellungen, Monitore  | ja            |
-| `secrets.json` | MQTT-Login-Daten                          | nein          |
+| `config.json`  | ETA-Einstellungen, Monitore               | ja            |
+| `secrets.json` | MQTT-Server und -Login-Daten              | nein          |
 
 ### secrets.json
 
-Vorlage kopieren und die eigenen Login-Daten eintragen:
+Vorlage kopieren und die eigenen Zugangsdaten eintragen:
 
 ```bash
 cp secrets.example.json secrets.json
 ```
 
 - **MQTT**:
+  - `server`: Die Adresse des MQTT-Servers.
+  - `port`: Der Port des MQTT-Servers (Standard: 1883).
   - `username`: Benutzername MQTT-Authentifizierung.
   - `password`: Passwort MQTT-Authentifizierung.
 
 ### config.json
 
-- **MQTT**:
-  - `server`: Die Adresse des MQTT-Servers.
-  - `port`: Der Port des MQTT-Servers.
 - **ETA**:
   - `interval`: Sendeintervall der ETA in Sekunden (max. 255).
   - `location`: Die Abruflocation.
   - `max_monitors`: Maximale Anzahl Werte pro Anfrage an die ETA (Standard: 20). Sind mehr Monitore eingetragen, fragt das Skript sie nacheinander in Paketen dieser Größe ab.
   - `max_attempts`: Leseversuche pro Paket à 10 Sekunden (Standard: 5). Kommt bis dahin keine gültige Antwort, wird das Paket übersprungen.
+  - `monitors`: Die Werte, die abgefragt und an MQTT gesendet werden sollen (siehe unten).
 
 Alle Werte werden zuerst von der ETA gelesen und danach gebündelt an MQTT gesendet.
-  - `monitors`: Die Werte, die abgefragt und an MQTT gesendet werden sollen (siehe unten).
 
 #### Monitore
 
