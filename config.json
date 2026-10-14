@@ -6,7 +6,7 @@
   "eta": {
     "interval": 30,
     "location": "0x08",
-    "max_monitors": 15,
+    "max_monitors": 20,
     "max_attempts": 5,
     "monitors": {
       "Kessel":                       { "id": "0x08", "topic": "kessel" },
