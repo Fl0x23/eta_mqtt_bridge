@@ -49,6 +49,10 @@ Für eine Temperatur reicht also `{ "id": "0x..." }`, alles andere hat passende 
 
 ### Monitor-IDs
 
+- `scale`: Teiler für den Rohwert (z. B. `10` → 452 wird 45,2).
+- `signed`: Wert kann negativ sein (z. B. Außentemperatur).
+- `invalid`: Rohwert für „kein gültiger Wert“, wird nicht gesendet.
+
 | ID     | Wert                         | Topic                           | `scale` | `signed` | `invalid` |
 |--------|------------------------------|---------------------------------|---------|----------|-----------|
 | `0x08` | Kessel                       | `kessel`                        | 10      | ja       |           |
