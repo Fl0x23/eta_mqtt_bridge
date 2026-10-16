@@ -95,3 +95,18 @@ Für eine Temperatur reicht also `{ "id": "0x..." }`, alles andere hat passende 
 | `0x37` | Wartung                      | `wartung_stunden`               | 1       | nein     |           |
 | `0x03` | Kesseltür                    | `kesseltuer`                    | 1       | nein     |           |
 | `0x28` | Restsauerstoff               | `restsauerstoff`                | 100     | nein     | `0x8000`  |
+| `0x27` | Kesselzustand                | `kesselzustand`                 | 1       | nein     |           |
+| `0x66` | Pufferstatus                 | `pufferstatus`                  | 1       | nein     |           |
+| `0x47` | Boilerstatus                 | `boilerstatus`                  | 1       | nein     |           |
+| `0x65` | Lambdasonde                  | `lambdasonde`                   | 1       | nein     |           |
+| `0x10` | Stellmotor oben              | `stellmotor_oben`               | 1       | nein     |           |
+| `0x1B` | Stellmotor oben Soll         | `stellmotor_oben_soll`          | 1       | nein     |           |
+| `0x11` | Stellmotor unten             | `stellmotor_unten`              | 1       | nein     |           |
+| `0x1C` | Stellmotor unten Soll        | `stellmotor_unten_soll`         | 1       | nein     |           |
+| `0x1A` | Gebläse Soll                 | `geblaese_soll`                 | 1       | nein     |           |
+| `0x49` | Abgas Soll                   | `abgas_soll`                    | 10      | ja       |           |
+| `0x34` | Vorlauf Soll MK1             | `vorlauf_soll_mk1`              | 10      | ja       |           |
+| `0x4C` | Puffer Soll                  | `puffer_soll`                   | 10      | ja       |           |
+| `0x19` | Pufferladepumpe Drehzahl     | `pufferladepumpe_drehzahl`      | 1       | nein     |           |
+| `0x18` | Boilerladepumpe Drehzahl     | `boilerladepumpe_drehzahl`      | 1       | nein     |           |
+| `0x23` | Abbrandzähler                | `abbrandzaehler`                | 1       | nein     |           |
